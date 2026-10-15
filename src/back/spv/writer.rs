@@ -3335,12 +3335,23 @@ impl Writer {
                 // > Any variable with integer or double-precision floating-
                 // > point type and with Input storage class in a fragment
                 // > shader, must be decorated Flat
+                //
+                // The VUID mandates Flat for *integer* and *double* inputs only. `Bool`
+                // is neither - and the one bool built-in a fragment shader declares,
+                // `BuiltIn FrontFacing`, is exactly what strict drivers (Qualcomm's
+                // Adreno A6xx compiler was seen in the wild) answer with
+                // VK_ERROR_INVALID_SHADER_NV when handed a Flat on top of it, aborting
+                // the whole pipeline and, through wgpu, losing the device. glslang never
+                // decorates gl_FrontFacing with Flat either, which is the form every
+                // other Vulkan program ships and every driver accepts, so a bool
+                // built-in input stays undecorated here. (Integer inputs keep their
+                // mandated Flat; SampleMask and friends are unaffected.)
                 if class == spirv::StorageClass::Input && stage == crate::ShaderStage::Fragment {
                     let is_flat = match ir_module.types[ty].inner {
                         crate::TypeInner::Scalar(scalar)
                         | crate::TypeInner::Vector { scalar, .. } => match scalar.kind {
-                            Sk::Uint | Sk::Sint | Sk::Bool => true,
-                            Sk::Float => false,
+                            Sk::Uint | Sk::Sint => true,
+                            Sk::Bool | Sk::Float => false,
                             Sk::AbstractInt | Sk::AbstractFloat => {
                                 return Err(Error::Validation(
                                     "Abstract types should not appear in IR presented to backends",
